@@ -5,8 +5,8 @@ import ChatInterface from './components/ChatInterface';
 import DailyReviewModal from './components/DailyReviewModal';
 import { fetchDailyEconomicNews, generateDailyReview } from './services/geminiService';
 import { format } from 'date-fns';
-import zhCN from 'date-fns/locale/zh-CN';
-import { PieChart } from 'lucide-react';
+import { zhCN } from 'date-fns/locale';
+import { PieChart, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- State ---
@@ -14,53 +14,67 @@ const App: React.FC = () => {
   const [dailyNews, setDailyNews] = useState<string>('');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [reviewContext, setReviewContext] = useState<string>('');
+  const [reviewContext, setReviewContext] = useState('');
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
 
   // --- Initial Load ---
   useEffect(() => {
-    // 1. Load Tasks from LocalStorage
-    const savedTasks = localStorage.getItem('strictpm_tasks');
-    if (savedTasks) {
+    const initApp = async () => {
+      // 1. Load Tasks from LocalStorage
+      const savedTasks = localStorage.getItem('strictpm_tasks');
+      if (savedTasks) {
         try {
-            setTasks(JSON.parse(savedTasks));
+          const parsed = JSON.parse(savedTasks);
+          setTasks(parsed);
         } catch (e) {
-            console.error("Failed to parse tasks", e);
+          console.error("Failed to parse saved tasks", e);
         }
-    }
+      }
 
-    // 2. Load or Fetch Daily News
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const newsKey = `strictpm_news_${todayStr}`;
-    const savedNews = localStorage.getItem(newsKey);
+      // 2. Load or Fetch Daily News
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const newsKey = `strictpm_news_${todayStr}`;
+      const savedNews = localStorage.getItem(newsKey);
 
-    if (savedNews) {
+      if (savedNews) {
         setDailyNews(savedNews);
-    } else {
-        fetchDailyEconomicNews().then(news => {
-            setDailyNews(news);
-            localStorage.setItem(newsKey, news);
-        });
-    }
+      } else {
+        try {
+          const news = await fetchDailyEconomicNews();
+          setDailyNews(news);
+          localStorage.setItem(newsKey, news);
+        } catch (e) {
+          console.error("News fetch failed", e);
+          setDailyNews("经济简报\n暂无最新资讯，请专注于您的今日计划。\n保持专注，高效工作。");
+        }
+      }
+      
+      setIsInitialLoading(false);
+    };
+
+    initApp();
   }, []);
 
   // --- Persistence ---
   useEffect(() => {
-    localStorage.setItem('strictpm_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    if (!isInitialLoading) {
+      localStorage.setItem('strictpm_tasks', JSON.stringify(tasks));
+    }
+  }, [tasks, isInitialLoading]);
 
   // --- Handlers ---
   const addTask = (taskInput: Omit<Task, 'id' | 'createdAt' | 'deferredCount' | 'status' | 'date'>) => {
     const newTask: Task = {
         ...taskInput,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         createdAt: Date.now(),
         status: 'pending',
         deferredCount: 0,
-        date: format(selectedDate, 'yyyy-MM-dd') // Use currently selected date
+        date: format(selectedDate, 'yyyy-MM-dd')
     };
     setTasks(prev => [...prev, newTask]);
   };
@@ -71,17 +85,16 @@ const App: React.FC = () => {
 
   const handleAddFromAI = (aiTasks: any[]) => {
     const newTasks = aiTasks.map(t => ({
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9) + Math.random(),
+        id: crypto.randomUUID(),
         title: t.title,
         estimatedDuration: t.estimatedDuration,
         tag: t.tag || 'Other',
         status: 'pending' as const,
         deferredCount: 0,
         createdAt: Date.now(),
-        // Support AI returning specific date, otherwise use currently selected date
         date: t.date || format(selectedDate, 'yyyy-MM-dd'),
         subtasks: t.subtasks?.map((st: any) => ({
-            id: Date.now().toString() + Math.random(),
+            id: crypto.randomUUID(),
             title: st.title,
             duration: st.duration,
             isCompleted: false
@@ -92,12 +105,10 @@ const App: React.FC = () => {
 
   const triggerDailyReview = async () => {
     setIsGeneratingReview(true);
-    
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
     const daysTasks = tasks.filter(t => t.date === dateKey);
     const completed = daysTasks.filter(t => t.status === 'completed');
     const pending = daysTasks.filter(t => t.status !== 'completed');
-    const deferred = daysTasks.filter(t => t.deferredCount > 0);
 
     const reviewText = await generateDailyReview(
         completed, 
@@ -110,22 +121,33 @@ const App: React.FC = () => {
     setIsReviewModalOpen(true);
   };
 
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 text-slate-900 animate-spin" />
+          <p className="text-slate-500 font-medium">正在初始化您的个人管家...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Top Navigation / Controls */}
+      {/* Top Navigation */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
-            <div className="bg-slate-900 text-white p-2 rounded-lg">
-                <PieChart size={20} />
+            <div className="bg-slate-900 text-white p-2 rounded-xl">
+                <PieChart size={24} />
             </div>
-            <span className="font-bold text-xl tracking-tight text-slate-900">StrictPM</span>
+            <span className="font-bold text-2xl tracking-tight text-slate-900">StrictPM</span>
         </div>
         <button 
             onClick={triggerDailyReview}
             disabled={isGeneratingReview}
-            className="text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+            className="text-sm font-bold text-slate-900 border-2 border-slate-900 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white transition-all disabled:opacity-50"
         >
-            {isGeneratingReview ? '生成分析中...' : '每日复盘'}
+            {isGeneratingReview ? '分析中...' : '每日复盘'}
         </button>
       </div>
 
