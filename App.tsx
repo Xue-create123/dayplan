@@ -3,70 +3,42 @@ import { Task } from './types';
 import Dashboard from './components/Dashboard';
 import ChatInterface from './components/ChatInterface';
 import DailyReviewModal from './components/DailyReviewModal';
-import { fetchDailyEconomicNews, generateDailyReview } from './services/geminiService';
+import { generateDailyReview } from './services/geminiService';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { PieChart, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  // --- State ---
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [dailyNews, setDailyNews] = useState<string>('');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   
-  // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewContext, setReviewContext] = useState('');
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
 
-  // --- Initial Load ---
   useEffect(() => {
     const initApp = async () => {
-      // 1. Load Tasks from LocalStorage
       const savedTasks = localStorage.getItem('strictpm_tasks');
       if (savedTasks) {
         try {
-          const parsed = JSON.parse(savedTasks);
-          setTasks(parsed);
+          setTasks(JSON.parse(savedTasks));
         } catch (e) {
           console.error("Failed to parse saved tasks", e);
         }
       }
-
-      // 2. Load or Fetch Daily News
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const newsKey = `strictpm_news_${todayStr}`;
-      const savedNews = localStorage.getItem(newsKey);
-
-      if (savedNews) {
-        setDailyNews(savedNews);
-      } else {
-        try {
-          const news = await fetchDailyEconomicNews();
-          setDailyNews(news);
-          localStorage.setItem(newsKey, news);
-        } catch (e) {
-          console.error("News fetch failed", e);
-          setDailyNews("经济简报\n今日全球市场运行平稳，暂无重大宏观波动。\n保持节奏，专注核心目标。");
-        }
-      }
-      
       setIsInitialLoading(false);
     };
-
     initApp();
   }, []);
 
-  // --- Persistence ---
   useEffect(() => {
     if (!isInitialLoading) {
       localStorage.setItem('strictpm_tasks', JSON.stringify(tasks));
     }
   }, [tasks, isInitialLoading]);
 
-  // --- Handlers ---
   const addTask = (taskInput: Omit<Task, 'id' | 'createdAt' | 'deferredCount' | 'status' | 'date'>) => {
     const newTask: Task = {
         ...taskInput,
@@ -83,11 +55,15 @@ const App: React.FC = () => {
     setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
   };
 
+  const handleDeleteTask = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleAddFromAI = (aiTasks: any[]) => {
     const newTasks = aiTasks.map(t => ({
         id: crypto.randomUUID(),
         title: t.title,
-        estimatedDuration: t.estimatedDuration,
+        estimatedDuration: Number(t.estimatedDuration) || 30, // Fallback to 30 mins
         tag: t.tag || 'Other',
         status: 'pending' as const,
         deferredCount: 0,
@@ -123,41 +99,35 @@ const App: React.FC = () => {
 
   if (isInitialLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 text-slate-900 animate-spin" />
-          <p className="text-slate-500 font-medium">正在启动...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <Loader2 className="w-8 h-8 text-slate-900 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen max-w-2xl mx-auto px-4 sm:px-0 flex flex-col pt-8 pb-12">
+      <div className="flex justify-between items-center mb-8 px-4 sm:px-0 shrink-0">
         <div className="flex items-center gap-2">
-            <div className="bg-slate-900 text-white p-2 rounded-xl">
-                <PieChart size={24} />
-            </div>
-            <span className="font-bold text-2xl tracking-tight text-slate-900">StrictPM</span>
+            <PieChart size={24} className="text-slate-900" />
+            <span className="font-black text-xl tracking-tighter text-slate-900 uppercase">StrictPM</span>
         </div>
         <button 
             onClick={triggerDailyReview}
             disabled={isGeneratingReview}
-            className="text-sm font-bold text-slate-900 border-2 border-slate-900 px-4 py-2 rounded-xl hover:bg-slate-900 hover:text-white transition-all disabled:opacity-50"
+            className="text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-widest disabled:opacity-30"
         >
-            {isGeneratingReview ? '分析中...' : '每日复盘'}
+            {isGeneratingReview ? 'Reviewing...' : 'Daily Review'}
         </button>
       </div>
 
-      <div className="h-[calc(100vh-140px)]">
+      <div className="flex-1">
         <Dashboard 
             tasks={tasks.filter(t => t.date === format(selectedDate, 'yyyy-MM-dd'))} 
-            dateStr={format(selectedDate, 'yyyy年MM月dd日 EEEE', { locale: zhCN })}
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
-            newsContent={dailyNews}
             onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
             onAddTask={addTask}
         />
       </div>

@@ -1,36 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>StrictPM - AI Daily Planner</title>
+    <title>StrictPM - AI 日程规划</title>
     
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     
-    <!-- process.env shim for browser compatibility -->
     <script>
-      window.process = window.process || { env: {} };
+      // Global shim to prevent reference errors on process.env
+      window.process = { env: { API_KEY: "" } };
     </script>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
-        background-color: #f8fafc;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        overscroll-behavior-y: none;
+        background-color: #ffffff;
+        font-family: 'Inter', -apple-system, system-ui, sans-serif;
+        color: #0f172a;
       }
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       
-      #root:not(:empty) {
-        animation: fadeIn 0.4s ease-out;
+      #root { min-height: 100vh; }
+
+      /* Date picker interaction fix */
+      .date-picker-wrapper {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(4px); }
-        to { opacity: 1; transform: translateY(0); }
+      .hidden-date-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        z-index: 10;
       }
     </style>
 

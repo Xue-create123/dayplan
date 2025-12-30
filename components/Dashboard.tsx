@@ -1,316 +1,369 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Task, TaskTag, Subtask } from '../types';
-import { Play, CheckCircle, Clock, TrendingUp, AlertCircle, Plus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, Newspaper } from 'lucide-react';
+import { Play, CheckCircle, Clock, Plus, ChevronLeft, ChevronRight, X, Edit2, Trash2, Calendar } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
 interface DashboardProps {
   tasks: Task[];
-  dateStr: string;
   selectedDate: Date;
   onDateChange: (date: Date) => void;
-  newsContent: string;
   onUpdateTask: (task: Task) => void;
+  onDeleteTask: (id: string) => void;
   onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'deferredCount' | 'status' | 'date'>) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-    tasks, dateStr, selectedDate, onDateChange, newsContent, onUpdateTask, onAddTask 
+    tasks, selectedDate, onDateChange, onUpdateTask, onDeleteTask, onAddTask 
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDuration, setNewTaskDuration] = useState(30);
-  const [newTaskTag, setNewTaskTag] = useState<TaskTag>('Work');
-  const [newSubtasks, setNewSubtasks] = useState<{title: string, duration: number}[]>([]);
-  const [subtaskInput, setSubtaskInput] = useState('');
-  const [subtaskDurationInput, setSubtaskDurationInput] = useState<string>('');
-
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDuration, setTaskDuration] = useState(30);
+  const [taskTag, setTaskTag] = useState<TaskTag>('Work');
+  const [taskSubtasks, setTaskSubtasks] = useState<string[]>([]);
+  const [currentSubtask, setCurrentSubtask] = useState('');
+  
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
-  const [isNewsExpanded, setIsNewsExpanded] = useState(false);
-
-  const newsData = useMemo(() => {
-    const lines = newsContent.split('\n').filter(l => l.trim() !== '');
-    return {
-        headline: lines[0] || '正在为您梳理经济动态...',
-        summary: lines[1] || '请稍候，AI 正在同步全球资讯。',
-        insight: lines.slice(2).join(' ') || '保持敏锐的洞察力。'
-    };
-  }, [newsContent]);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const stats = useMemo(() => {
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.status === 'completed').length;
-    const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-    return { total, completed, progress };
+    const totalMinutes = tasks.reduce((acc, t) => acc + (Number(t.estimatedDuration) || 0), 0);
+    const completedMinutes = tasks
+      .filter(t => t.status === 'completed')
+      .reduce((acc, t) => acc + (Number(t.estimatedDuration) || 0), 0);
+    const progress = totalMinutes === 0 ? 0 : Math.round((completedMinutes / totalMinutes) * 100);
+    return { 
+      total: tasks.length, 
+      completed: tasks.filter(t => t.status === 'completed').length, 
+      progress, 
+      totalMinutes, 
+      completedMinutes 
+    };
   }, [tasks]);
 
   const toggleTaskStatus = (task: Task) => {
-    if (task.status === 'completed') {
-        onUpdateTask({ ...task, status: 'pending', actualEndTime: undefined });
-    } else {
-        onUpdateTask({ ...task, status: 'completed', actualEndTime: Date.now() });
-    }
+    const nextStatus = task.status === 'completed' ? 'pending' : 'completed';
+    onUpdateTask({ ...task, status: nextStatus, actualEndTime: nextStatus === 'completed' ? Date.now() : undefined });
   };
 
-  const handleStartTask = (task: Task, e: React.MouseEvent) => {
-    e.stopPropagation();
-    onUpdateTask({ ...task, status: 'in-progress', actualStartTime: Date.now() });
+  const resetForm = () => {
+    setTaskTitle('');
+    setTaskDuration(30);
+    setTaskTag('Work');
+    setTaskSubtasks([]);
+    setCurrentSubtask('');
+    setEditingTask(null);
   };
 
-  const toggleSubtask = (task: Task, subtaskId: string) => {
-    const updatedSubtasks = task.subtasks?.map(st => 
-        st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st
-    );
-    onUpdateTask({ ...task, subtasks: updatedSubtasks });
-  };
-
-  const toggleExpand = (taskId: string) => {
-    const newSet = new Set(expandedTasks);
-    if (newSet.has(taskId)) {
-        newSet.delete(taskId);
-    } else {
-        newSet.add(taskId);
-    }
-    setExpandedTasks(newSet);
-  };
-
-  const handleManualAdd = (e: React.FormEvent) => {
+  const handleSaveTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
+    if (!taskTitle.trim()) return;
     
-    const formattedSubtasks: Subtask[] | undefined = newSubtasks.length > 0 
-        ? newSubtasks.map(st => ({
-            id: crypto.randomUUID(),
-            title: st.title,
-            duration: st.duration > 0 ? st.duration : undefined,
-            isCompleted: false
-        })) 
-        : undefined;
+    if (editingTask) {
+      onUpdateTask({
+        ...editingTask,
+        title: taskTitle,
+        estimatedDuration: Number(taskDuration),
+        tag: taskTag,
+        subtasks: taskSubtasks.map((title, idx) => {
+          const existing = editingTask.subtasks?.[idx];
+          return {
+            id: existing?.id || crypto.randomUUID(),
+            title,
+            isCompleted: existing?.isCompleted || false
+          };
+        })
+      });
+    } else {
+      onAddTask({
+        title: taskTitle,
+        estimatedDuration: Number(taskDuration),
+        tag: taskTag,
+        subtasks: taskSubtasks.map(title => ({
+          id: crypto.randomUUID(),
+          title,
+          isCompleted: false
+        }))
+      });
+    }
 
-    onAddTask({
-      title: newTaskTitle,
-      estimatedDuration: Number(newTaskDuration),
-      tag: newTaskTag,
-      subtasks: formattedSubtasks
-    });
-
-    setNewTaskTitle('');
-    setNewSubtasks([]);
+    resetForm();
     setShowAddModal(false);
+  };
+
+  const openEdit = (task: Task) => {
+    setEditingTask(task);
+    setTaskTitle(task.title);
+    setTaskDuration(task.estimatedDuration);
+    setTaskTag(task.tag);
+    setTaskSubtasks(task.subtasks?.map(s => s.title) || []);
+    setShowAddModal(true);
+  };
+
+  const addSubtaskInput = () => {
+    if (currentSubtask.trim()) {
+      setTaskSubtasks([...taskSubtasks, currentSubtask.trim()]);
+      setCurrentSubtask('');
+    }
+  };
+
+  const removeSubtaskInput = (index: number) => {
+    setTaskSubtasks(taskSubtasks.filter((_, i) => i !== index));
   };
 
   const getTagColor = (tag: TaskTag) => {
     switch (tag) {
-      case 'Work': return 'bg-indigo-100 text-indigo-700';
-      case 'Study': return 'bg-amber-100 text-amber-700';
-      case 'Life': return 'bg-emerald-100 text-emerald-700';
-      case 'Health': return 'bg-rose-100 text-rose-700';
-      default: return 'bg-slate-100 text-slate-700';
+      case 'Work': return 'bg-slate-900 text-white';
+      case 'Study': return 'bg-blue-50 text-blue-700';
+      case 'Life': return 'bg-slate-100 text-slate-600';
+      case 'Health': return 'bg-red-50 text-red-600';
+      default: return 'bg-slate-100 text-slate-500';
     }
   };
 
+  const triggerCalendar = () => {
+    dateInputRef.current?.showPicker?.();
+  };
+
   return (
-    <div className="flex flex-col h-full pb-20">
-      {/* 1. Header with News Banner */}
-      <div className="bg-white px-6 py-6 rounded-3xl shadow-sm border border-slate-100 z-10 mb-6">
-        <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-                <button onClick={() => onDateChange(addDays(selectedDate, -1))} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-                    <ChevronLeft size={24} className="text-slate-400" />
-                </button>
-                <div className="text-center">
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                        {format(selectedDate, 'MM月dd日', { locale: zhCN })}
-                    </h1>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                        {format(selectedDate, 'EEEE', { locale: zhCN })}
-                    </p>
-                </div>
-                <button onClick={() => onDateChange(addDays(selectedDate, 1))} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-                    <ChevronRight size={24} className="text-slate-400" />
-                </button>
+    <div className="flex flex-col h-full">
+      {/* Date Header Section */}
+      <div className="flex flex-col items-center mb-8 relative">
+        <div className="flex items-center gap-8 mb-4">
+          <button onClick={() => onDateChange(addDays(selectedDate, -1))} className="text-slate-300 hover:text-slate-900 transition-colors p-2">
+            <ChevronLeft size={24} />
+          </button>
+          
+          <div className="date-picker-wrapper group" onClick={triggerCalendar}>
+            <input 
+              ref={dateInputRef}
+              type="date" 
+              className="hidden-date-input"
+              value={format(selectedDate, 'yyyy-MM-dd')}
+              onChange={(e) => onDateChange(new Date(e.target.value))}
+            />
+            <div className="text-center group-hover:scale-105 transition-transform">
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter flex items-center gap-2">
+                {format(selectedDate, 'MM月dd日', { locale: zhCN })}
+                <Calendar size={18} className="text-slate-200 group-hover:text-slate-400" />
+              </h1>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-0.5">
+                {format(selectedDate, 'EEEE', { locale: zhCN })}
+              </p>
             </div>
-            
-            <div className="hidden sm:block text-right">
-                <div className="text-3xl font-black text-slate-900 leading-none">{stats.progress}%</div>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Daily Target</div>
-            </div>
+          </div>
+
+          <button onClick={() => onDateChange(addDays(selectedDate, 1))} className="text-slate-300 hover:text-slate-900 transition-colors p-2">
+            <ChevronRight size={24} />
+          </button>
         </div>
 
-        {/* Economic News Banner */}
-        <div 
-            className={`
-                overflow-hidden transition-all duration-500 ease-in-out bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 group
-                ${isNewsExpanded ? 'max-h-96 ring-2 ring-slate-900 ring-offset-2' : 'max-h-16'}
-            `}
-            onClick={() => setIsNewsExpanded(!isNewsExpanded)}
-        >
-            <div className="flex items-center justify-between px-4 h-16">
-                <div className="flex items-center gap-4 overflow-hidden">
-                    <div className="bg-slate-900 p-2 rounded-xl shrink-0 group-hover:scale-110 transition-transform">
-                        <TrendingUp size={18} className="text-white" />
-                    </div>
-                    <div className="flex flex-col overflow-hidden">
-                         <span className="text-sm font-bold text-slate-900 truncate">{newsData.headline}</span>
-                         {!isNewsExpanded && <span className="text-xs text-slate-500 truncate">{newsData.summary}</span>}
-                    </div>
-                </div>
-                <div className="shrink-0 ml-4">
-                    {isNewsExpanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
-                </div>
+        {/* Progress Bar (Time Based) */}
+        {stats.totalMinutes > 0 && (
+          <>
+            <div className="w-full max-w-[240px] h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-slate-900 transition-all duration-700 ease-out"
+                style={{ width: `${stats.progress}%` }}
+              />
             </div>
-            
-            <div className={`px-6 pb-6 transition-all duration-500 ${isNewsExpanded ? 'opacity-100 mt-2' : 'opacity-0'}`}>
-                <p className="text-sm leading-relaxed text-slate-600 mb-4">{newsData.summary}</p>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-slate-900">
-                    <p className="text-xs font-bold text-slate-900 italic leading-relaxed">
-                        “{newsData.insight}”
-                    </p>
-                </div>
+            <div className="flex gap-4 mt-2">
+              <span className="text-[10px] font-bold text-slate-900 uppercase tracking-tighter">
+                完成度 {stats.progress}%
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                {stats.completedMinutes} / {stats.totalMinutes} MIN
+              </span>
             </div>
-        </div>
-      </div>
-
-      {/* 2. Task List Area */}
-      <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
-        <div className="flex justify-between items-end mb-6">
-            <div>
-                <h2 className="text-xl font-black text-slate-900">今日行动</h2>
-                <p className="text-sm font-medium text-slate-400">目前共有 {tasks.length} 项日程安排</p>
-            </div>
-            <button 
-                onClick={() => setShowAddModal(true)}
-                className="bg-slate-900 text-white p-2.5 rounded-xl hover:scale-105 transition-all shadow-lg"
-            >
-                <Plus size={24} />
-            </button>
-        </div>
-
-        {tasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200">
-                <div className="bg-slate-50 p-6 rounded-full mb-4">
-                    <Clock size={40} className="text-slate-300" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">准备好开始了吗？</h3>
-                <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                    点击右侧加号或使用下方 AI 助手来为您规划第一项任务。
-                </p>
-            </div>
-        ) : (
-            <div className="space-y-4">
-                {tasks.map(task => {
-                    const isExpanded = expandedTasks.has(task.id);
-                    const isCompleted = task.status === 'completed';
-                    
-                    return (
-                        <div key={task.id} className={`bg-white rounded-2xl border border-slate-100 shadow-sm transition-all overflow-hidden ${isCompleted ? 'bg-slate-50/50' : ''}`}>
-                            <div className="p-5 flex items-start gap-4">
-                                <button 
-                                    onClick={() => toggleTaskStatus(task)}
-                                    className={`mt-1 transition-all shrink-0 ${isCompleted ? 'text-emerald-500' : 'text-slate-200 hover:text-slate-400'}`}
-                                >
-                                    <CheckCircle size={28} fill={isCompleted ? "currentColor" : "none"} />
-                                </button>
-                                
-                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => task.subtasks && toggleExpand(task.id)}>
-                                    <div className="flex flex-wrap gap-2 mb-2">
-                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${getTagColor(task.tag)}`}>
-                                            {task.tag}
-                                        </span>
-                                        {task.deferredCount > 0 && (
-                                            <span className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
-                                                <AlertCircle size={10} /> 延期 {task.deferredCount}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <h3 className={`font-bold text-slate-900 leading-tight ${isCompleted ? 'line-through text-slate-400' : ''}`}>
-                                        {task.title}
-                                    </h3>
-                                    <div className="flex items-center gap-4 mt-3 text-xs font-bold text-slate-400 uppercase tracking-tighter">
-                                        <span className="flex items-center gap-1"><Clock size={12} /> {task.estimatedDuration}min</span>
-                                        {task.subtasks && <span>{task.subtasks.filter(s => s.isCompleted).length}/{task.subtasks.length} 子项</span>}
-                                    </div>
-                                </div>
-
-                                {!isCompleted && task.status === 'pending' && (
-                                    <button 
-                                        onClick={(e) => handleStartTask(task, e)}
-                                        className="bg-slate-900 text-white p-2 rounded-xl"
-                                    >
-                                        <Play size={16} fill="currentColor" />
-                                    </button>
-                                )}
-                            </div>
-                            
-                            {task.subtasks && isExpanded && (
-                                <div className="px-5 pb-5 pt-2 space-y-2 border-t border-slate-50 bg-slate-50/30">
-                                    {task.subtasks.map(sub => (
-                                        <div key={sub.id} className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-100">
-                                            <button 
-                                                onClick={() => toggleSubtask(task, sub.id)}
-                                                className={`transition-colors ${sub.isCompleted ? 'text-emerald-500' : 'text-slate-200 hover:text-slate-300'}`}
-                                            >
-                                                <CheckCircle size={18} fill={sub.isCompleted ? "currentColor" : "none"} />
-                                            </button>
-                                            <span className={`text-sm font-medium ${sub.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                                                {sub.title}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
+          </>
         )}
       </div>
 
-      {/* Manual Add Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-                <div className="p-6 border-b border-slate-100">
-                    <h3 className="text-xl font-black text-slate-900">手动添加计划</h3>
-                </div>
-                <form onSubmit={handleManualAdd} className="p-6 space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">任务名称</label>
-                        <input 
-                            autoFocus
-                            className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:border-slate-900 outline-none transition-all font-bold"
-                            value={newTaskTitle}
-                            onChange={(e) => setNewTaskTitle(e.target.value)}
-                            placeholder="如：深入分析 Q3 营收报告"
-                        />
+      {/* Main Task List */}
+      <div className="flex-1 px-4 sm:px-0">
+        <div className="flex justify-between items-baseline mb-6">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">今日行动</h2>
+          <div className="flex gap-2 text-[10px] font-bold text-slate-400">
+             <span>{stats.completed}/{stats.total} 任务</span>
+          </div>
+        </div>
+
+        {tasks.length === 0 ? (
+          <div className="py-20 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center text-center">
+            <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">还没有任何计划</p>
+            <button onClick={() => setShowAddModal(true)} className="mt-4 text-xs font-black text-slate-900 underline underline-offset-4">立即创建任务</button>
+          </div>
+        ) : (
+          <div className="space-y-3 pb-32">
+            {tasks.map(task => {
+              const isExpanded = expandedTasks.has(task.id);
+              const isCompleted = task.status === 'completed';
+              
+              return (
+                <div key={task.id} className={`bg-white rounded-2xl border transition-all ${isCompleted ? 'border-slate-50 opacity-60' : 'border-slate-100 shadow-sm'}`}>
+                  <div className="p-4 flex items-center gap-4">
+                    <button onClick={() => toggleTaskStatus(task)} className={`shrink-0 transition-all ${isCompleted ? 'text-emerald-500' : 'text-slate-200 hover:text-slate-900'}`}>
+                      <CheckCircle size={24} fill={isCompleted ? "currentColor" : "none"} />
+                    </button>
+                    
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => task.subtasks && task.subtasks.length > 0 && setExpandedTasks(new Set(isExpanded ? [...expandedTasks].filter(id => id !== task.id) : [...expandedTasks, task.id]))}>
+                      <h3 className={`font-bold text-sm truncate ${isCompleted ? 'line-through text-slate-300' : 'text-slate-900'}`}>
+                        {task.title}
+                      </h3>
+                      <div className="flex gap-2 mt-1">
+                        <span className={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${getTagColor(task.tag)}`}>
+                          {task.tag}
+                        </span>
+                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1">
+                          <Clock size={8} /> {task.estimatedDuration}m
+                        </span>
+                        {task.subtasks && task.subtasks.length > 0 && (
+                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">
+                            {task.subtasks.filter(s => s.isCompleted).length}/{task.subtasks.length} 子任务
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    <div className="flex gap-1 shrink-0">
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); openEdit(task); }} 
+                         className="p-2 text-slate-300 hover:text-slate-900 transition-colors"
+                         title="编辑"
+                       >
+                          <Edit2 size={14} />
+                       </button>
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }} 
+                         className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                         title="删除"
+                       >
+                          <Trash2 size={14} />
+                       </button>
+                    </div>
+                  </div>
+                  
+                  {task.subtasks && isExpanded && (
+                    <div className="px-4 pb-4 space-y-2 border-t border-slate-50 pt-3">
+                      {task.subtasks.map(sub => (
+                        <div key={sub.id} className="flex items-center gap-3 pl-8">
+                          <button 
+                            onClick={() => {
+                              const updatedSub = task.subtasks?.map(s => s.id === sub.id ? { ...s, isCompleted: !s.isCompleted } : s);
+                              onUpdateTask({ ...task, subtasks: updatedSub });
+                            }} 
+                            className={sub.isCompleted ? 'text-emerald-400' : 'text-slate-200'}
+                          >
+                            <CheckCircle size={16} fill={sub.isCompleted ? "currentColor" : "none"} />
+                          </button>
+                          <span className={`text-xs font-medium ${sub.isCompleted ? 'line-through text-slate-300' : 'text-slate-600'}`}>
+                            {sub.title}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Floating Add Button */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
+        <button 
+          onClick={() => { resetForm(); setShowAddModal(true); }}
+          className="bg-slate-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform active:scale-95"
+        >
+          <Plus size={28} />
+        </button>
+      </div>
+
+      {/* Add/Edit Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6 animate-in slide-in-from-bottom sm:zoom-in duration-300">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                       {editingTask ? '编辑任务' : '添加新任务'}
+                    </h3>
+                    <button onClick={() => { setShowAddModal(false); resetForm(); }} className="text-slate-300 hover:text-slate-900"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSaveTask} className="space-y-5">
+                    <input 
+                        autoFocus
+                        className="w-full text-lg font-bold outline-none border-b-2 border-slate-100 focus:border-slate-900 pb-2 transition-colors placeholder:text-slate-200"
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                        placeholder="想做什么？"
+                    />
+                    
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">预计时长 (MIN)</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">预计时长 (MIN)</label>
                             <input 
                                 type="number"
-                                className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold"
-                                value={newTaskDuration}
-                                onChange={(e) => setNewTaskDuration(Number(e.target.value))}
+                                className="w-full bg-slate-50 p-2.5 rounded-xl font-bold outline-none focus:ring-2 ring-slate-900/5 transition-all"
+                                value={taskDuration}
+                                onChange={(e) => setTaskDuration(Number(e.target.value))}
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">分类</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">分类标签</label>
                             <select 
-                                className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold appearance-none"
-                                value={newTaskTag}
-                                onChange={(e) => setNewTaskTag(e.target.value as TaskTag)}
+                                className="w-full bg-slate-50 p-2.5 rounded-xl font-bold outline-none appearance-none"
+                                value={taskTag}
+                                onChange={(e) => setTaskTag(e.target.value as TaskTag)}
                             >
                                 <option value="Work">Work</option>
                                 <option value="Study">Study</option>
                                 <option value="Life">Life</option>
                                 <option value="Health">Health</option>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                     </div>
-                    <div className="flex gap-3 pt-4">
-                        <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 font-bold text-slate-400 hover:text-slate-600 transition-colors">取消</button>
-                        <button className="flex-1 py-3 bg-slate-900 text-white rounded-2xl font-black shadow-xl">保存任务</button>
+
+                    <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">任务拆解 (SUBTASKS)</label>
+                        <div className="flex gap-2">
+                            <input 
+                                className="flex-1 bg-slate-50 p-2.5 rounded-xl text-sm font-medium outline-none"
+                                placeholder="输入子任务..."
+                                value={currentSubtask}
+                                onChange={(e) => setCurrentSubtask(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSubtaskInput())}
+                            />
+                            <button type="button" onClick={addSubtaskInput} className="bg-slate-100 text-slate-900 px-3 rounded-xl hover:bg-slate-200 transition-colors">
+                                <Plus size={18} />
+                            </button>
+                        </div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {taskSubtasks.map((st, i) => (
+                                <div key={i} className="flex justify-between items-center bg-slate-50/50 px-3 py-2 rounded-lg text-xs font-medium text-slate-600">
+                                    <span>{st}</span>
+                                    <button type="button" onClick={() => removeSubtaskInput(i)} className="text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                       {editingTask && (
+                         <button 
+                            type="button"
+                            onClick={() => { onDeleteTask(editingTask.id); setShowAddModal(false); resetForm(); }}
+                            className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl font-black text-sm active:scale-95 transition-all"
+                          >
+                             删除任务
+                          </button>
+                       )}
+                       <button className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl shadow-slate-900/20 active:scale-95 transition-all">
+                          {editingTask ? '确认更新' : '确认保存'}
+                       </button>
                     </div>
                 </form>
             </div>
