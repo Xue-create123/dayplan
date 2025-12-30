@@ -10,6 +10,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     
+    <!-- process.env shim for browser compatibility -->
+    <script>
+      window.process = window.process || { env: {} };
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
@@ -20,13 +25,12 @@
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       
-      /* Simple fade-in for the app once loaded */
       #root:not(:empty) {
-        animation: fadeIn 0.5s ease-in;
+        animation: fadeIn 0.4s ease-out;
       }
       @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
       }
     </style>
 
@@ -39,9 +43,9 @@
     "lucide-react": "https://esm.sh/lucide-react@0.460.0",
     "date-fns": "https://esm.sh/date-fns@4.1.0",
     "date-fns/locale": "https://esm.sh/date-fns@4.1.0/locale",
-    "date-fns/": "https://esm.sh/date-fns@^4.1.0/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
   }
 }
 </script>

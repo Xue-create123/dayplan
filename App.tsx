@@ -49,7 +49,7 @@ const App: React.FC = () => {
           localStorage.setItem(newsKey, news);
         } catch (e) {
           console.error("News fetch failed", e);
-          setDailyNews("经济简报\n暂无最新资讯，请专注于您的今日计划。\n保持专注，高效工作。");
+          setDailyNews("经济简报\n今日全球市场运行平稳，暂无重大宏观波动。\n保持节奏，专注核心目标。");
         }
       }
       
@@ -126,7 +126,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 text-slate-900 animate-spin" />
-          <p className="text-slate-500 font-medium">正在初始化您的个人管家...</p>
+          <p className="text-slate-500 font-medium">正在启动...</p>
         </div>
       </div>
     );
@@ -134,7 +134,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Top Navigation */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
             <div className="bg-slate-900 text-white p-2 rounded-xl">
