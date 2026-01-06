@@ -10,7 +10,7 @@ interface ChatInterfaceProps {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
   dailyReviewContext: string | null;
-  currentDateContext: string; // Add current date prop
+  currentDateContext: string;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen, setIsOpen, dailyReviewContext, currentDateContext }) => {
@@ -18,7 +18,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
     {
       id: 'welcome',
       role: 'model',
-      text: "你好！我是 CoachPM。我可以帮你规划多天的日程，也可以帮你拆解复杂的任务。请告诉我你的目标。",
+      text: "你好！我是 CoachPM。我可以帮你规划日程，也可以帮你拆解复杂的任务。请告诉我你的目标。",
       timestamp: Date.now()
     }
   ]);
@@ -28,16 +28,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Initialize Chat Session with Date Context
+  // Initialize Chat Session
   useEffect(() => {
-    if (!chatSessionRef.current) {
+    if (isOpen && !chatSessionRef.current) {
         try {
             chatSessionRef.current = createChatSession(tasks, currentDateContext);
         } catch (e) {
-            console.warn("Failed to init chat session", e);
+            console.error("Failed to init chat session", e);
         }
     }
-  }, [tasks, currentDateContext]);
+  }, [isOpen, tasks, currentDateContext]);
 
   // Handle auto-scroll
   useEffect(() => {
@@ -83,6 +83,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
     setIsLoading(true);
 
     try {
+      // Lazy init or re-init session if needed
       if (!chatSessionRef.current) {
          chatSessionRef.current = createChatSession(tasks, currentDateContext);
       }
@@ -130,18 +131,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
       }]);
 
     } catch (error: any) {
-      console.error("Chat error", error);
+      console.error("Chat error:", error);
       let errorMsg = "连接出错，请重试。";
-      if (error.message?.includes('API key')) {
-          errorMsg = "API Key 缺失或无效。请检查配置。";
+      if (error.message?.toLowerCase().includes('api key')) {
+          errorMsg = "API Key 校验失败。请确保环境变量中已配置正确的 Key。";
       } else if (error.message?.includes('fetch')) {
-          errorMsg = "网络连接失败。请检查网络或代理设置。";
+          errorMsg = "网络连接失败，请检查网络环境。";
       }
       
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: errorMsg,
+        text: `${errorMsg}\n(错误详情: ${error.message || '未知'})`,
         timestamp: Date.now()
       }]);
     } finally {
@@ -156,9 +157,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
     }
   };
 
-  // Simple Markdown Renderer (Bold)
   const renderMessageText = (text: string) => {
-    // Split by **bold** syntax
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, index) => {
         if (part.startsWith('**') && part.endsWith('**')) {
@@ -172,16 +171,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-8 right-6 bg-slate-900 text-white h-14 px-4 rounded-full shadow-lg hover:bg-slate-800 transition-all z-40 flex items-center justify-center gap-2 group border-2 border-white"
+        className="fixed bottom-8 right-4 sm:right-6 bg-slate-900 text-white h-14 px-5 rounded-full shadow-2xl hover:bg-slate-800 transition-all z-40 flex items-center justify-center gap-2 group border-2 border-white active:scale-95"
       >
         <MessageSquare size={24} />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">规划助手</span>
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-black">规划助手</span>
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-[400px] h-[80vh] sm:h-[600px] bg-white sm:rounded-2xl shadow-2xl z-50 flex flex-col border border-gray-200 overflow-hidden">
+    <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 w-full sm:w-[400px] h-full sm:h-[600px] bg-white sm:rounded-2xl shadow-2xl z-50 flex flex-col border border-gray-200 overflow-hidden animate-in slide-in-from-bottom duration-300">
       {/* Header */}
       <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-2">
@@ -190,22 +189,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
             </div>
             <div>
                 <h3 className="font-bold">CoachPM</h3>
-                <p className="text-xs text-slate-300">AI 规划导师</p>
+                <p className="text-[10px] text-slate-300 uppercase tracking-widest">AI Planner</p>
             </div>
         </div>
-        <button onClick={() => setIsOpen(false)} className="text-slate-300 hover:text-white">
+        <button onClick={() => setIsOpen(false)} className="text-slate-300 hover:text-white p-2">
             <X size={24} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scrollbar-hide">
         {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl p-3 text-sm whitespace-pre-wrap ${
+                <div className={`max-w-[85%] rounded-2xl p-4 text-sm whitespace-pre-wrap leading-relaxed ${
                     msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-br-none' 
-                    : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'
+                    ? 'bg-slate-900 text-white rounded-br-none shadow-lg' 
+                    : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none shadow-sm'
                 }`}>
                     {renderMessageText(msg.text)}
                 </div>
@@ -213,8 +212,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
         ))}
         {isLoading && (
              <div className="flex justify-start">
-                 <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-none p-3 shadow-sm">
-                    <Loader2 size={18} className="animate-spin text-gray-400" />
+                 <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none p-3 shadow-sm">
+                    <Loader2 size={18} className="animate-spin text-slate-400" />
                  </div>
              </div>
         )}
@@ -222,11 +221,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
       </div>
 
       {/* Input */}
-      <div className="p-3 bg-white border-t border-gray-100 shrink-0">
-        <div className="flex items-end gap-2 bg-gray-100 rounded-2xl px-4 py-2 border border-transparent focus-within:border-slate-200 focus-within:bg-white transition-all">
+      <div className="p-4 bg-white border-t border-gray-100 shrink-0 pb-safe">
+        <div className="flex items-end gap-2 bg-slate-50 rounded-2xl px-4 py-2 border border-transparent focus-within:border-slate-200 focus-within:bg-white transition-all">
             <textarea 
                 ref={textareaRef}
-                className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-500 resize-none max-h-[120px] py-2"
+                className="flex-1 bg-transparent outline-none text-sm text-slate-900 placeholder-slate-400 resize-none max-h-[120px] py-2"
                 placeholder="帮我规划..."
                 rows={1}
                 value={input}
@@ -236,7 +235,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
             <button 
                 onClick={handleSendMessage}
                 disabled={isLoading || !input.trim()}
-                className="mb-1 text-slate-900 disabled:opacity-30 hover:text-blue-600 transition-colors"
+                className="mb-1 p-2 text-slate-900 disabled:opacity-30 hover:text-blue-600 transition-colors"
             >
                 <Send size={20} />
             </button>

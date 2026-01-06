@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { Task } from "../types";
 
-// Helper to get Gemini Instance safely
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+// Helper to get Gemini Instance safely using the system-provided API key
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- 1. Chat & Project Manager Service ---
 
@@ -79,6 +79,7 @@ export const generateDailyReview = async (
     });
     return response.text || "无法生成复盘。";
   } catch (e) {
+    console.error("Daily review error:", e);
     return "无法生成复盘，请检查网络连接。";
   }
 };

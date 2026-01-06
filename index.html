@@ -11,13 +11,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     
     <script>
-      // Global shim to prevent reference errors on process.env
-      // 如果您是静态部署且遇到AI连接问题，请尝试在下方引号中填入您的 API Key
+      // Global shim for process.env to prevent ReferenceErrors
       window.process = window.process || {};
       window.process.env = window.process.env || {};
-      if (!window.process.env.API_KEY) {
-        window.process.env.API_KEY = "";
-      }
     </script>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -26,6 +22,7 @@
         background-color: #ffffff;
         font-family: 'Inter', -apple-system, system-ui, sans-serif;
         color: #0f172a;
+        overscroll-behavior-y: none;
       }
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
