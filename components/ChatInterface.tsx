@@ -31,7 +31,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
   // Initialize Chat Session with Date Context
   useEffect(() => {
     if (!chatSessionRef.current) {
-        chatSessionRef.current = createChatSession(tasks, currentDateContext);
+        try {
+            chatSessionRef.current = createChatSession(tasks, currentDateContext);
+        } catch (e) {
+            console.warn("Failed to init chat session", e);
+        }
     }
   }, [tasks, currentDateContext]);
 
@@ -125,12 +129,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
         timestamp: Date.now()
       }]);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error", error);
+      let errorMsg = "连接出错，请重试。";
+      if (error.message?.includes('API key')) {
+          errorMsg = "API Key 缺失或无效。请检查配置。";
+      } else if (error.message?.includes('fetch')) {
+          errorMsg = "网络连接失败。请检查网络或代理设置。";
+      }
+      
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: "连接出错，请重试。",
+        text: errorMsg,
         timestamp: Date.now()
       }]);
     } finally {
@@ -161,10 +172,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tasks, onAddTasks, isOpen
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-full shadow-lg hover:bg-slate-800 transition-all z-40 flex items-center gap-2 group"
+        className="fixed bottom-8 right-6 bg-slate-900 text-white h-14 px-4 rounded-full shadow-lg hover:bg-slate-800 transition-all z-40 flex items-center justify-center gap-2 group border-2 border-white"
       >
         <MessageSquare size={24} />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap">打开规划助手</span>
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">规划助手</span>
       </button>
     );
   }

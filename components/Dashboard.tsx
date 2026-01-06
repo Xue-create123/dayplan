@@ -272,20 +272,20 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* Floating Add Button */}
+      {/* Floating Add Button - Center */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
         <button 
           onClick={() => { resetForm(); setShowAddModal(true); }}
-          className="bg-slate-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform active:scale-95"
+          className="bg-slate-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform active:scale-95 border-2 border-white"
         >
           <Plus size={28} />
         </button>
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal - Positioned at Top */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6 animate-in slide-in-from-bottom sm:zoom-in duration-300">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-start justify-center pt-24 sm:pt-0 sm:items-center z-50 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6 animate-in slide-in-from-top-10 sm:slide-in-from-bottom sm:zoom-in duration-300">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
                        {editingTask ? '编辑任务' : '添加新任务'}
